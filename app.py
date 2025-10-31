@@ -1,31 +1,45 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Oct 22 11:43:33 2025
-
 @author: ericl
 """
 
 import dash
+# Importera alla nödvändiga Dash-komponenter
 from dash import html, dcc, Input, Output, dash_table
 import pandas as pd
-from urllib.parse import parse_qs # <-- Importera för att läsa URL:en
+from urllib.parse import parse_qs
+
+# --- Lista över förväntade kolumner BASERAT PÅ DIN BILD ---
+# Vi lägger till 'Position' som valfri, ifall du lägger till den senare.
+EXPECTED_COLUMNS = [
+    'Name', 'Team', 'Total (IFK)', 'Position'
+]
 
 # --- 1. DATALADDNING ---
-
 def load_data():
-    # --- UPPDATERAD GOOGLE SHEET CSV-LÄNK ---
-    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtbObnJjSMSgEc7L5ZYBad_NscZPR2tQqrsecPSjCnGjyNoxWDQCGyxQyKVn9Vlw/pub?output=csv"
+    # --- UPPDATERA DENNA LÄNK MED DIN RIKTIGA CSV-LÄNK ---
+    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRHlsWWf5ixMe6JaAhqRiZRBFTTNUI1Ait-7wZhh2FriUPfj6_ikF7BRmHJPXXUnZYy0P5bAf-EpXiR/pub?output=csv"
     
     try:
-        df = pd.read_csv(google_sheet_url)
+        # Läs in CSV, hoppa över de två första raderna (No, Name, Team...)
+        df = pd.read_csv(google_sheet_url, header=1) 
     except Exception as e:
         print(f"FEL: Kunde inte läsa datan från Google Sheets. Fel: {e}")
         return pd.DataFrame()
 
+    # --- Kontrollera efter saknade kolumner ---
+    missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
+    if missing_cols:
+        print(f"VARNING: Följande kolumner saknas i din CSV: {', '.join(missing_cols)}")
+        # Fyll i saknade kolumner med 'N/A' så att appen inte kraschar
+        for col in missing_cols:
+            df[col] = 'N/A'
+
+    # --- Lätt städning ---
     df['Team'] = df['Team'].fillna('Okänt')
     df = df.dropna(subset=['Name'])
-    if 'Förväntad speltid' in df.columns:
-        df['Förväntad speltid'] = df['Förväntad speltid'].round(1)
+    df['Name'] = df['Name'].str.strip()
 
     print("Datan har laddats framgångsrikt från Google Sheets.")
     return df
@@ -37,37 +51,26 @@ df = load_data()
 app = dash.Dash(__name__)
 server = app.server
 
-# --- 3. Definiera appens Layout (HELT OMARBETAD) ---
-# Vi lägger till dcc.Location för att läsa URL:en och en 'output-div'
-# som kommer att fyllas med antingen spelardata eller tabellen.
+# --- 3. Definiera appens Layout ---
 def serve_layout():
     return html.Div(children=[
-        # Denna komponent läser av webbläsarens URL
         dcc.Location(id='url', refresh=False),
-        
-        # Denna div kommer att innehålla vår data
         html.Div(id='page-content')
     ])
 
 app.layout = serve_layout()
 
-# --- 4. NYTT: Callback för att uppdatera innehållet ---
-# Denna funktion körs varje gång URL:en ändras
+# --- 4. Callback för att uppdatera innehållet ---
 @app.callback(
     Output('page-content', 'children'),
     Input('url', 'search')
 )
 def display_page(search_string):
-    # 'search_string' är den del av URL:en som börjar med '?', t.ex. '?name=Alice%20Andersson'
-    
     player_name = None
     
-    # --- FIX: Kontrollera att search_string inte är None OCH inte är tom ---
     if search_string and search_string.strip('?'):
-        # Parsa söksträngen
         params = parse_qs(search_string.strip('?'))
         if 'name' in params:
-            # Ta namnet från URL:en (t.ex. 'Alice Andersson')
             player_name = params['name'][0]
 
     # --- FALL 1: Ett spelarnamn finns i URL:en ---
@@ -75,37 +78,38 @@ def display_page(search_string):
         if df.empty:
             return html.P("Data kunde inte laddas.")
             
-        # Hitta spelaren i vår DataFrame
-        player_data = df[df['Name'] == player_name]
+        player_name_clean = player_name.strip()
+        player_data = df[df['Name'].str.lower() == player_name_clean.lower()]
         
         if player_data.empty:
-            return html.P(f"Kunde inte hitta data för spelaren: {player_name}")
+            return html.P(f"Kunde inte hitta data för spelaren: {player_name_clean}")
             
-        # Plocka ut den första (och enda) raden
         player = player_data.iloc[0]
         
-        # Skapa en anpassad layout för en enskild spelare
+        # --- FIX: Använder kolumnerna som finns: 'Name', 'Team', 'Total (IFK)' ---
         return html.Div([
-            html.H2(player['Name']),
+            html.H2(player.get('Name', 'Okänt Namn')),
             html.Hr(),
-            html.P(f"Lag: {player['Team']}"),
-            html.P(f"Position: {player['Position']}"),
+            html.P(f"Lag: {player.get('Team', 'N/A')}"),
+            html.P(f"Position: {player.get('Position', 'N/A')}"), # Visar 'N/A' eftersom den saknas
             html.H3("Speltid"),
-            html.P(f"Total speltid: {player['Total speltid']} min"),
-            html.P(f"Förväntad speltid: {player['Förväntad speltid']} min"),
-            # Lägg till fler fält här efter behov
+            html.P(f"Total speltid: {player.get('Total (IFK)', 'N/A')} min"),
+            # Vi har inte 'Förväntad speltid', så vi visar den inte.
         ], style={'padding': '20px', 'fontFamily': 'sans-serif'})
 
     # --- FALL 2: Ingen spelare finns i URL:en (visa hela tabellen) ---
-    # Detta är vad som visas när du går till "Spelminuter"-sidan
+    # Vi visar bara de kolumner som faktiskt finns
+    display_columns = [col for col in EXPECTED_COLUMNS if col in df.columns]
+    
     return html.Div(children=[
         html.H1(children='Spelarstatistik - Totalt'),
-        html.P("Interaktiv tabell över total speltid vs. förväntad speltid."),
+        html.P("Interaktiv tabell över total speltid."),
         html.P("Klicka på kolumnrubrikerna för att sortera. Skriv i fälten under rubrikerna för att filtrera."),
 
         dash_table.DataTable(
             id='spelar-tabell',
-            columns=[{"name": i, "id": i} for i in df.columns],
+            # --- FIX: Använder bara de kolumner som finns ---
+            columns=[{"name": i, "id": i} for i in display_columns],
             data=df.to_dict('records'),
             sort_action="native",
             filter_action="native",
