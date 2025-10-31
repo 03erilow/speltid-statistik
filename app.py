@@ -49,7 +49,7 @@ def serve_layout():
         html.Div(id='page-content')
     ])
 
-app.layout = serve_layout
+app.layout = serve_layout()
 
 # --- 4. NYTT: Callback för att uppdatera innehållet ---
 # Denna funktion körs varje gång URL:en ändras
@@ -120,4 +120,5 @@ def display_page(search_string):
 # --- 5. Kör appen (endast för lokal testning) ---
 if __name__ == '__main__':
     app.run(debug=True)
+
 
