@@ -6,7 +6,7 @@ Created on Wed Oct 22 11:43:33 2025
 """
 
 import dash
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, dash_table
 import pandas as pd
 from urllib.parse import parse_qs # <-- Importera för att läsa URL:en
 
@@ -61,7 +61,9 @@ def display_page(search_string):
     # 'search_string' är den del av URL:en som börjar med '?', t.ex. '?name=Alice%20Andersson'
     
     player_name = None
-    if search_string:
+    
+    # --- FIX: Kontrollera att search_string inte är None OCH inte är tom ---
+    if search_string and search_string.strip('?'):
         # Parsa söksträngen
         params = parse_qs(search_string.strip('?'))
         if 'name' in params:
@@ -120,5 +122,4 @@ def display_page(search_string):
 # --- 5. Kör appen (endast för lokal testning) ---
 if __name__ == '__main__':
     app.run(debug=True)
-
 
