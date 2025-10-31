@@ -19,7 +19,7 @@ EXPECTED_COLUMNS = [
 # --- 1. DATALADDNING ---
 def load_data():
     # --- UPPDATERA DENNA LÄNK MED DIN RIKTIGA CSV-LÄNK ---
-    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRHlsWWf5ixMe6JaAhqRiZRBFTTNUI1Ait-7wZhh2FriUPfj6_ikF7BRmHJPXXUnZYy0P5bAf-EpXiR/pub?output=csv"
+    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtbObnJjSMSgEc7L5ZYBad_NscZPR2tQqrsecPSjCnGjyNoxWDQCGyxQyKVn9Vlw/pub?output=csv"
     
     try:
         # Läs in CSV, hoppa över de två första raderna (No, Name, Team...)
@@ -126,4 +126,5 @@ def display_page(search_string):
 # --- 5. Kör appen (endast för lokal testning) ---
 if __name__ == '__main__':
     app.run(debug=True)
+
 
