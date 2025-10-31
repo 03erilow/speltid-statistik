@@ -22,8 +22,9 @@ def load_data():
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtbObnJjSMSgEc7L5ZYBad_NscZPR2tQqrsecPSjCnGjyNoxWDQCGyxQyKVn9Vlw/pub?output=csv"
     
     try:
-        # Läs in CSV, hoppa över de två första raderna (No, Name, Team...)
-        df = pd.read_csv(google_sheet_url, header=1) 
+        # --- FIX: Ta bort 'header=1'. 
+        # En publicerad CSV har rätt rubriker på första raden (rad 0).
+        df = pd.read_csv(google_sheet_url) 
     except Exception as e:
         print(f"FEL: Kunde inte läsa datan från Google Sheets. Fel: {e}")
         return pd.DataFrame()
@@ -32,18 +33,23 @@ def load_data():
     missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
     if missing_cols:
         print(f"VARNING: Följande kolumner saknas i din CSV: {', '.join(missing_cols)}")
-        # Fyll i saknade kolumner med 'N/A' så att appen inte kraschar
         for col in missing_cols:
             df[col] = 'N/A'
 
     # --- Lätt städning ---
     df['Team'] = df['Team'].fillna('Okänt')
-    df = df.dropna(subset=['Name'])
-    df['Name'] = df['Name'].str.strip()
+    
+    # VIKTIGT: Vi kan bara släppa rader om 'Name' faktiskt finns
+    if 'Name' in df.columns:
+        df = df.dropna(subset=['Name'])
+        df['Name'] = df['Name'].str.strip()
+    else:
+        print("FEL: Kolumnen 'Name' hittades inte, kan inte städa datan.")
+        return pd.DataFrame() # Returnera tom data för att visa att något är fel
 
     print("Datan har laddats framgångsrikt från Google Sheets.")
     return df
-
+    
 # --- Ladda all data vid start ---
 df = load_data()
 
@@ -126,5 +132,6 @@ def display_page(search_string):
 # --- 5. Kör appen (endast för lokal testning) ---
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
