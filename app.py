@@ -37,6 +37,8 @@ WIDE_SHEET_URLS = {
     "December": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS6svwKCVdfK8pgXMAVFpjgmcOae8ptEW8w5OdW8oO-t746JvCrW2cSSmXpljSLhaDkgChRF6pwEO4q/pub?output=csv"
 }
 
+DATASET_LABEL='HERR'
+
 
 SASONG_AR = 2025  # används för ålder = SASONG_AR - Birth year
 
@@ -741,3 +743,4 @@ def render_player(player, window, teams, comps, start_date, end_date):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
