@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-IFK Playing Time Dash (Option B)
-- Reads wide-format monthly sheets (published as CSV per sheet tab)
-- Converts to long format for analytics
-- Provides team + player playing-time visualizations
+IFK Speltid – Dash (Option B, uppdaterad)
+Genomför 6 steg:
+1) Fixar datumparsning (år 0000/1899 -> korrekt säsongsår)
+2) Vänder lag-topplistan så flest minuter ligger överst
+3) Tar bort Datakvalitet-fliken
+4) Stöd för Herr + Dam i en och samma app (dataset-switch)
+5) Stöd för flera säsonger (t.ex. 2025 + 2026) (säsong-switch)
+6) Fortsätter med samma Excel-mall och publicerade CSV-länkar (Option B)
+
+OBS:
+- Du måste fylla på DATASETS med rätt URLs för DAM och (senare) 2026.
+- Dina nuvarande HERR 2025-URL:er är inlagda som default.
 """
 
 import re
@@ -18,35 +26,47 @@ import plotly.express as px
 
 
 # ============================================================
-# 1) CONFIG
+# 1) CONFIG: DATASETS (Herr/Dam) + Säsonger
 # ============================================================
 
+SASONG_DEFAULT = 2025
+DATASET_DEFAULT = "HERR"
 
-WIDE_SHEET_URLS = {
-    "Januari": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRM7VMVvrdG4m2EC0TEd5K48Uu2QdmBlLvgP7SoPlth7kerxqqG4CRGp8woku3umlb92Z2Bl7BC5F1i/pub?output=csv",
-    "Februari": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQltnyugu71GDNbHKb51w7HeTb4cREy1IYZY_TgW_uxoHT0_idnkEQJEMf2VYjNF_6K2IyMAHNG_be2/pub?output=csv",
-    "Mars": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYouUx8pTcHMJyco3KED4DpYnM07I5dIXrooPU-MXIzoChovOeWIpoF4H5akFu14J2qgjihlMeHCun/pub?output=csv",
-    "April": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRUPOlhwdZDEtv_2EDdw4hgkleE1usfTq32xOx_ZnFgPvN9Ah-T1CjuhCL-alFAgGnAdpNmraAIvX8D/pub?output=csv", 
-    "Maj": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWG2f9_RMxu_GQRkb2amJy8twaPpYNzEYOmEnim--_6EF6fkowjWQ8hu8ybPCcwohKAxr68izmawtm/pub?output=csv",
-    "Juni": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwUDyRB9H57kzaURL0GLzZChTQXIGz78HhjR79OKaOju0I1JtF-gAc_6vSb9a4JHwnlokAJOSRZsy/pub?output=csv",
-    "Juli": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQAQKTXSsYvkcRwrNvNkaJyAYqjQOxlXl9Y7HryzRKcOc-btUMwPtryUcEABrcEcQrr8W36mYG6UaYU/pub?output=csv",
-    "Augusti": "https://docs.google.com/spreadsheets/d/e/2PACX-1vShBzn2GqH02590h19dUNJhIeU3Egg1jrAMg7Jy1AsvKcxBaeptps2DAFa2WGku_eIh0H1lw_ptcpqY/pub?output=csv",
-    "September": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTjbpYxpx3mRIGyJAYKoaRpFvsHfU4DLfeTg0xJm4zKmybL5iUEoPOtTQ_mScsWo5-T6wgtOrrIPfN3/pub?output=csv",
-    "Oktober": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS81r8mkN4dKbPVcnCsSoXaW38pjbagKQOrT4LM3qeDj5CSsKzBL09-y6zjH2Bz-eBiGDmTZJnI_fZC/pub?output=csv",
-    "November": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBZb4cfCdcMHfn-TFRUbETAY0vv38dwA3z2_QpTlek0x6FwkgG5TFx-k-6uQC0ErpvhdvbWuLaxCFI/pub?output=csv",
-    "December": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS6svwKCVdfK8pgXMAVFpjgmcOae8ptEW8w5OdW8oO-t746JvCrW2cSSmXpljSLhaDkgChRF6pwEO4q/pub?output=csv"
+# Lägg in DAM och 2026 när ni har publicerat dem
+DATASETS = {
+    "HERR": {
+        "label": "A-lag herr",
+        "seasons": {
+            2025: {
+                "Januari": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRM7VMVvrdG4m2EC0TEd5K48Uu2QdmBlLvgP7SoPlth7kerxqqG4CRGp8woku3umlb92Z2Bl7BC5F1i/pub?output=csv",
+                "Februari": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQltnyugu71GDNbHKb51w7HeTb4cREy1IYZY_TgW_uxoHT0_idnkEQJEMf2VYjNF_6K2IyMAHNG_be2/pub?output=csv",
+                "Mars": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYouUx8pTcHMJyco3KED4DpYnM07I5dIXrooPU-MXIzoChovOeWIpoF4H5akFu14J2qgjihlMeHCun/pub?output=csv",
+                "April": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRUPOlhwdZDEtv_2EDdw4hgkleE1usfTq32xOx_ZnFgPvN9Ah-T1CjuhCL-alFAgGnAdpNmraAIvX8D/pub?output=csv",
+                "Maj": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWG2f9_RMxu_GQRkb2amJy8twaPpYNzEYOmEnim--_6EF6fkowjWQ8hu8ybPCcwohKAxr68izmawtm/pub?output=csv",
+                "Juni": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwUDyRB9H57kzaURL0GLzZChTQXIGz78HhjR79OKaOju0I1JtF-gAc_6vSb9a4JHwnlokAJOSRZsy/pub?output=csv",
+                "Juli": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQAQKTXSsYvkcRwrNvNkaJyAYqjQOxlXl9Y7HryzRKcOc-btUMwPtryUcEABrcEcQrr8W36mYG6UaYU/pub?output=csv",
+                "Augusti": "https://docs.google.com/spreadsheets/d/e/2PACX-1vShBzn2GqH02590h19dUNJhIeU3Egg1jrAMg7Jy1AsvKcxBaeptps2DAFa2WGku_eIh0H1lw_ptcpqY/pub?output=csv",
+                "September": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTjbpYxpx3mRIGyJAYKoaRpFvsHfU4DLfeTg0xJm4zKmybL5iUEoPOtTQ_mScsWo5-T6wgtOrrIPfN3/pub?output=csv",
+                "Oktober": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS81r8mkN4dKbPVcnCsSoXaW38pjbagKQOrT4LM3qeDj5CSsKzBL09-y6zjH2Bz-eBiGDmTZJnI_fZC/pub?output=csv",
+                "November": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBZb4cfCdcMHfn-TFRUbETAY0vv38dwA3z2_QpTlek0x6FwkgG5TFx-k-6uQC0ErpvhdvbWuLaxCFI/pub?output=csv",
+                "December": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS6svwKCVdfK8pgXMAVFpjgmcOae8ptEW8w5OdW8oO-t746JvCrW2cSSmXpljSLhaDkgChRF6pwEO4q/pub?output=csv"
+            },
+            # 2026: {...}  # Lägg till när ni publicerat 2026
+        },
+    },
+    "DAM": {
+        "label": "A-lag dam",
+        "seasons": {
+            # 2025: {...}  # Lägg in när ni publicerat dam 2025
+            # 2026: {...}
+        },
+    }
 }
-
-DATASET_LABEL='HERR'
-
-
-SASONG_AR = 2025  # används för ålder = SASONG_AR - Birth year
 
 # I din mall ligger metadata-etiketter i kolumn D:
 # D1=Date, D2=Opponent, D3=Team, D4=Type of match
 META_LABEL_COL = 3  # 0-index => A=0, B=1, C=2, D=3
 
-# Förväntade meta-rader (case-insensitive)
 META_KEYS = {
     "date": ["date", "datum"],
     "opponent": ["opponent", "motstånd"],
@@ -63,7 +83,7 @@ TOTAL_COL_MARKERS = ["totalt", "summa"]
 
 
 # ============================================================
-# 2) HJÄLPFUNKTIONER: PARSING
+# 2) HJÄLPFUNKTIONER: PARSING + DATUM-FIX
 # ============================================================
 
 SWEDISH_MONTH_HINTS = {
@@ -145,11 +165,21 @@ def parse_date_cell(val, sheet_name=None, default_year=2025):
 
     return None
 
+def force_season_year(dt: pd.Timestamp, season_year: int) -> pd.Timestamp:
+    """
+    Steg 1: Fixar felparsat datum (år 0000/1899/etc).
+    Om år < 2000 men månad/dag verkar rimliga -> tvinga år=season_year.
+    """
+    if pd.isna(dt):
+        return dt
+    try:
+        if dt.year < 2000:
+            return dt.replace(year=season_year)
+    except Exception:
+        return dt
+    return dt
+
 def find_header_row(df_wide: pd.DataFrame):
-    """
-    Hittar raden som matchar HEADER_TOKENS i A..D (case-insensitive).
-    Returnerar (row_index, col_indices) där col_indices mappar fältnamn -> kolumnindex.
-    """
     for r in range(df_wide.shape[0]):
         row_vals = [lower(df_wide.iat[r, c]) for c in range(min(4, df_wide.shape[1]))]
         if row_vals == HEADER_TOKENS:
@@ -161,10 +191,6 @@ def is_total_column(opponent_cell, date_cell) -> bool:
     return any(m in txt for m in TOTAL_COL_MARKERS)
 
 def infer_match_possible_minutes(max_minutes: int) -> int:
-    """
-    Skattar matchens "möjliga minuter" utifrån max registrerade minuter i matchen.
-    Robust mot att ingen når 90 (t.ex. träningsmatch med byten).
-    """
     if max_minutes is None or np.isnan(max_minutes):
         return 90
     m = int(max_minutes)
@@ -180,10 +206,10 @@ def infer_match_possible_minutes(max_minutes: int) -> int:
 
 
 # ============================================================
-# 3) WIDE -> LONG
+# 3) WIDE -> LONG (per månad)
 # ============================================================
 
-def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
+def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str, dataset_key: str, season_year: int) -> pd.DataFrame:
     df_wide = df_wide.copy()
 
     header_row, cols = find_header_row(df_wide)
@@ -191,19 +217,15 @@ def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     data_start = header_row + 1
-    first_match_col = cols["name"] + 1  # matchkolumner startar direkt efter Name (kolumn E i din mall)
+    first_match_col = cols["name"] + 1
 
-    # meta-rader hittas via etiketter i kolumn D
-    # Förväntat: D1=Date, D2=Opponent, D3=Team, D4=Type of match
-    # Men vi matchar text flexibelt.
     meta_row = {}
-    for r in range(min(15, df_wide.shape[0])):  # scanna toppdelen
+    for r in range(min(15, df_wide.shape[0])):
         label = lower(df_wide.iat[r, META_LABEL_COL])
         for key, alts in META_KEYS.items():
             if any(label == a for a in alts):
                 meta_row[key] = r
 
-    # Fallback om någon saknas: anta raderna 0..3
     date_r = meta_row.get("date", 0)
     opp_r = meta_row.get("opponent", 1)
     team_r = meta_row.get("team", 2)
@@ -219,7 +241,7 @@ def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
         if is_total_column(opp_val, date_val):
             continue
 
-        match_date = parse_date_cell(date_val, sheet_name=sheet_name, default_year=SASONG_AR)
+        match_date = parse_date_cell(date_val, sheet_name=sheet_name, default_year=season_year)
         opponent = s(opp_val)
         team = s(team_val)
         competition = s(type_val)
@@ -245,19 +267,19 @@ def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
             except Exception:
                 continue
 
-            # birth_year kan vara blankt i test-data – hantera snyggt
             birth_year = None
             age = None
             if not pd.isna(birth_year_raw) and s(birth_year_raw):
                 try:
                     birth_year = int(float(birth_year_raw))
-                    age = SASONG_AR - birth_year
+                    age = season_year - birth_year
                 except Exception:
                     birth_year = None
                     age = None
 
             rows.append({
-                "dataset": DATASET_LABEL,
+                "dataset": dataset_key,
+                "season": season_year,
                 "sheet_month": sheet_name,
                 "match_date": pd.to_datetime(match_date),
                 "opponent": opponent,
@@ -276,33 +298,46 @@ def wide_month_to_long(df_wide: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
-def load_and_convert_all() -> pd.DataFrame:
+
+def load_and_convert_all_for(dataset_key: str, season_year: int) -> pd.DataFrame:
+    """
+    Steg 4/5: Läser rätt dataset + rätt säsong.
+    """
+    cfg = DATASETS.get(dataset_key, {})
+    seasons = cfg.get("seasons", {})
+    wide_urls = seasons.get(season_year, {})
+
     parts = []
-    for sheet_name, url in WIDE_SHEET_URLS.items():
+    for sheet_name, url in wide_urls.items():
         try:
             df_wide = pd.read_csv(url, header=None)
         except Exception as e:
-            print(f"[FEL] Kunde inte läsa '{sheet_name}' från URL: {e}")
+            print(f"[FEL] Kunde inte läsa '{dataset_key} {season_year} / {sheet_name}' från URL: {e}")
             continue
 
-        part = wide_month_to_long(df_wide, sheet_name)
+        part = wide_month_to_long(df_wide, sheet_name, dataset_key=dataset_key, season_year=season_year)
         if not part.empty:
             parts.append(part)
 
     if not parts:
         return pd.DataFrame(columns=[
-            "dataset","sheet_month","match_date","opponent","team","competition",
+            "dataset","season","sheet_month","match_date","opponent","team","competition",
             "player_no","name","birth_year","age","position","minutes"
         ])
 
     df = pd.concat(parts, ignore_index=True)
 
-    # städning
+    # Städning + Steg 1: Datum-fix
     df["name"] = df["name"].astype(str).str.strip()
     df["team"] = df["team"].astype(str).str.strip()
     df["opponent"] = df["opponent"].astype(str).str.strip()
     df["competition"] = df["competition"].fillna("Okänd").astype(str).str.strip()
-    df["match_date"] = pd.to_datetime(df["match_date"])
+
+    df["match_date"] = pd.to_datetime(df["match_date"], errors="coerce")
+    df["match_date"] = df["match_date"].apply(lambda d: force_season_year(d, season_year))
+
+    df = df.dropna(subset=["match_date"])
+
     df["minutes"] = pd.to_numeric(df["minutes"], errors="coerce").fillna(0).astype(int)
 
     return df
@@ -313,9 +348,6 @@ def load_and_convert_all() -> pd.DataFrame:
 # ============================================================
 
 def add_possible_minutes(df_long: pd.DataFrame) -> pd.DataFrame:
-    """
-    Skapar 'possible_minutes' per match (team+datum) och joinar in på varje rad.
-    """
     if df_long.empty:
         df_long["possible_minutes"] = 90
         return df_long
@@ -332,15 +364,12 @@ def add_possible_minutes(df_long: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# 5) DASH UI (modernare “cards” + svenska texter)
+# 5) DASH UI (modernare “cards” + svenska texter) + Steg 3/4/5
 # ============================================================
 
 app = dash.Dash(__name__)
 server = app.server
 
-DF = add_possible_minutes(load_and_convert_all())
-
-# En enkel modern layout-stil via inline-styles (fungerar på Render utan assets/CSS)
 COLORS = {
     "bg": "#f6f7fb",
     "card": "#ffffff",
@@ -360,27 +389,60 @@ CARD_STYLE = {
 H2_STYLE = {"margin": 0, "fontSize": "20px", "color": COLORS["text"]}
 MUTED_STYLE = {"margin": 0, "color": COLORS["muted"], "fontSize": "13px"}
 
+def available_seasons_for(dataset_key: str):
+    cfg = DATASETS.get(dataset_key, {})
+    seasons = sorted(list(cfg.get("seasons", {}).keys()))
+    return seasons
+
 def serve_layout():
-    teams = sorted(DF["team"].unique()) if not DF.empty else []
-    comps = sorted(DF["competition"].unique()) if not DF.empty else []
-    players = sorted(DF["name"].unique()) if not DF.empty else []
+    dataset_opts = [{"label": v["label"], "value": k} for k, v in DATASETS.items()]
+
+    seasons_default = available_seasons_for(DATASET_DEFAULT) or [SASONG_DEFAULT]
+    season_default = SASONG_DEFAULT if SASONG_DEFAULT in seasons_default else seasons_default[0]
+
+    # laddar initial data för default-val (Steg 4/5)
+    df0 = add_possible_minutes(load_and_convert_all_for(DATASET_DEFAULT, season_default))
+    valid_dates = df0["match_date"].dropna()
+    start_date = valid_dates.min().date() if not valid_dates.empty else None
+    end_date = valid_dates.max().date() if not valid_dates.empty else None
+
+    teams = sorted(df0["team"].unique()) if not df0.empty else []
+    comps = sorted(df0["competition"].unique()) if not df0.empty else []
 
     return html.Div(
-        style={"background": COLORS["bg"], "minHeight": "100vh", "padding": "18px", "fontFamily": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial"},
+        style={"background": COLORS["bg"], "minHeight": "100vh", "padding": "18px",
+               "fontFamily": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial"},
         children=[
             dcc.Location(id="url", refresh=False),
+
+            # Dataset + Säsong (Steg 4/5)
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "12px", "marginBottom": "12px"},
+                children=[
+                    html.Div(style=CARD_STYLE, children=[
+                        html.Div("Dataset", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
+                        dcc.Dropdown(id="dataset-select", options=dataset_opts, value=DATASET_DEFAULT, clearable=False),
+                    ]),
+                    html.Div(style=CARD_STYLE, children=[
+                        html.Div("Säsong", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
+                        dcc.Dropdown(
+                            id="season-select",
+                            options=[{"label": str(y), "value": y} for y in seasons_default],
+                            value=season_default,
+                            clearable=False,
+                        ),
+                    ]),
+                ],
+            ),
 
             html.Div(
                 style={**CARD_STYLE, "display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 children=[
                     html.Div([
-                        html.H2(f"Speltid – Dashboard ({DATASET_LABEL})", style=H2_STYLE),
+                        html.H2("Speltid – Dashboard", style=H2_STYLE),
                         html.P("Översikt, spelarkort och belastning", style=MUTED_STYLE),
                     ]),
-                    html.Div([
-                        html.Div(f"Rader: {len(DF)}", style={"color": COLORS["muted"], "fontSize": "13px", "textAlign": "right"}),
-                        html.Div(f"Spelare: {DF['name'].nunique() if not DF.empty else 0}", style={"color": COLORS["muted"], "fontSize": "13px", "textAlign": "right"}),
-                    ])
+                    html.Div(id="stats-box", style={"color": COLORS["muted"], "fontSize": "13px", "textAlign": "right"})
                 ]
             ),
 
@@ -391,38 +453,27 @@ def serve_layout():
                 children=[
                     html.Div(style=CARD_STYLE, children=[
                         html.Div("Lag", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
-                        dcc.Dropdown(
-                            id="team-filter",
-                            options=[{"label": t, "value": t} for t in teams],
-                            multi=True,
-                            placeholder="Alla lag",
-                        ),
+                        dcc.Dropdown(id="team-filter", options=[{"label": t, "value": t} for t in teams],
+                                     multi=True, placeholder="Alla lag"),
                     ]),
                     html.Div(style=CARD_STYLE, children=[
                         html.Div("Matchtyp / tävling", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
-                        dcc.Dropdown(
-                            id="comp-filter",
-                            options=[{"label": c, "value": c} for c in comps],
-                            multi=True,
-                            placeholder="Alla",
-                        ),
+                        dcc.Dropdown(id="comp-filter", options=[{"label": c, "value": c} for c in comps],
+                                     multi=True, placeholder="Alla"),
                     ]),
                     html.Div(style=CARD_STYLE, children=[
                         html.Div("Datumintervall", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
                         dcc.DatePickerRange(
                             id="date-filter",
-                            start_date=DF["match_date"].min().date() if not DF.empty else None,
-                            end_date=DF["match_date"].max().date() if not DF.empty else None,
+                            start_date=start_date,
+                            end_date=end_date,
                             display_format="YYYY-MM-DD",
                         ),
                     ]),
                     html.Div(style=CARD_STYLE, children=[
                         html.Div("Topplista – antal spelare", style={"fontSize": "13px", "color": COLORS["muted"], "marginBottom": "6px"}),
-                        dcc.Slider(
-                            id="topn-slider",
-                            min=10, max=60, step=5, value=30,
-                            marks={10:"10",20:"20",30:"30",40:"40",50:"50",60:"60"},
-                        ),
+                        dcc.Slider(id="topn-slider", min=10, max=60, step=5, value=30,
+                                   marks={10:"10",20:"20",30:"30",40:"40",50:"50",60:"60"}),
                     ]),
                 ],
             ),
@@ -436,11 +487,14 @@ def serve_layout():
                     children=[
                         dcc.Tab(label="Översikt", value="oversikt"),
                         dcc.Tab(label="Spelare", value="spelare"),
-                        dcc.Tab(label="Datakvalitet", value="kvalitet"),
+                        # Steg 3: Datakvalitet borttagen
                     ],
                 ),
                 html.Div(id="tab-content", style={"marginTop": "12px"}),
             ]),
+
+            # Lagra aktiv DF i browser memory (så vi slipper globala DF och kan byta dataset/säsong)
+            dcc.Store(id="df-store", data=df0.to_json(date_format="iso", orient="split")),
         ],
     )
 
@@ -478,6 +532,64 @@ def player_share(df_player: pd.DataFrame) -> float:
 # ============================================================
 
 @app.callback(
+    Output("season-select", "options"),
+    Output("season-select", "value"),
+    Input("dataset-select", "value"),
+    Input("season-select", "value"),
+)
+def update_season_options(dataset_key, current_season):
+    seasons = available_seasons_for(dataset_key)
+    opts = [{"label": str(y), "value": y} for y in seasons]
+    if not seasons:
+        # dataset saknar config -> håll kvar befintlig men låt det synas
+        return [], None
+    if current_season in seasons:
+        return opts, current_season
+    return opts, seasons[0]
+
+
+@app.callback(
+    Output("df-store", "data"),
+    Output("team-filter", "options"),
+    Output("comp-filter", "options"),
+    Output("date-filter", "start_date"),
+    Output("date-filter", "end_date"),
+    Output("stats-box", "children"),
+    Input("dataset-select", "value"),
+    Input("season-select", "value"),
+)
+def reload_data(dataset_key, season_year):
+    if not dataset_key or not season_year:
+        empty = pd.DataFrame()
+        return empty.to_json(date_format="iso", orient="split"), [], [], None, None, ""
+
+    df = add_possible_minutes(load_and_convert_all_for(dataset_key, int(season_year)))
+
+    teams = sorted(df["team"].unique()) if not df.empty else []
+    comps = sorted(df["competition"].unique()) if not df.empty else []
+
+    valid_dates = df["match_date"].dropna()
+    start_date = valid_dates.min().date() if not valid_dates.empty else None
+    end_date = valid_dates.max().date() if not valid_dates.empty else None
+
+    stats = []
+    stats.append(html.Div(f"Rader: {len(df)}"))
+    stats.append(html.Div(f"Spelare: {df['name'].nunique() if not df.empty else 0}"))
+    stats.append(html.Div(f"Matcher: {df[['team','match_date']].drop_duplicates().shape[0] if not df.empty else 0}"))
+    stats.append(html.Div(f"Dataset: {DATASETS.get(dataset_key, {}).get('label', dataset_key)}"))
+    stats.append(html.Div(f"Säsong: {season_year}"))
+
+    return (
+        df.to_json(date_format="iso", orient="split"),
+        [{"label": t, "value": t} for t in teams],
+        [{"label": c, "value": c} for c in comps],
+        start_date,
+        end_date,
+        stats
+    )
+
+
+@app.callback(
     Output("tab-content", "children"),
     Input("tabs", "value"),
     Input("url", "search"),
@@ -486,10 +598,12 @@ def player_share(df_player: pd.DataFrame) -> float:
     Input("date-filter", "start_date"),
     Input("date-filter", "end_date"),
     Input("topn-slider", "value"),
+    Input("df-store", "data"),
 )
-def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
-    if DF.empty:
-        return html.Div("Ingen data laddad. Kontrollera WIDE_SHEET_URLS och publicerade CSV-länkar.", style={"color": COLORS["muted"]})
+def render_tabs(tab, search, teams, comps, start_date, end_date, topn, df_json):
+    df = pd.read_json(df_json, orient="split") if df_json else pd.DataFrame()
+    if df.empty:
+        return html.Div("Ingen data laddad för valt dataset/säsong.", style={"color": COLORS["muted"]})
 
     player_name = None
     if search and search.strip("?"):
@@ -497,25 +611,21 @@ def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
         if "name" in params and params["name"]:
             player_name = params["name"][0].strip()
 
-    dff = apply_filters(DF, teams, comps, start_date, end_date)
+    dff = apply_filters(df, teams, comps, start_date, end_date)
 
     if tab == "oversikt":
         if dff.empty:
             return html.Div("Inga rader matchar valda filter.", style={"color": COLORS["muted"]})
 
-        # (4) Lagöversikt: total speltid per spelare
         totals = (dff.groupby("name", as_index=False)
                   .agg(total_minutes=("minutes","sum")))
         totals = totals.sort_values("total_minutes", ascending=False)
 
-        # Form: senaste 5 matcher (snittminuter)
-        # Vi räknar på per spelare, sorterat per datum
         form_list = []
         for p in totals["name"].tolist():
             dp = dff[dff["name"] == p].sort_values("match_date")
             last5 = dp.tail(5)
             form5 = last5["minutes"].mean() if len(last5) else 0
-            # tillväxt senaste 30 dagar: jämför senaste 30 med föregående 30
             if len(dp):
                 end = dp["match_date"].max()
                 w1 = dp[(dp["match_date"] > end - pd.Timedelta(days=30)) & (dp["match_date"] <= end)]["minutes"].sum()
@@ -538,12 +648,14 @@ def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
             hover_data={"form5_avg":":.1f", "growth30": True},
             title="Lagöversikt: total speltid per spelare (Topplista)",
         )
-        # Markera median
-        fig_team.add_vline(x=median_minutes, line_width=2, line_dash="dash", annotation_text="Median", annotation_position="top")
+        fig_team.add_vline(x=median_minutes, line_width=2, line_dash="dash",
+                           annotation_text="Median", annotation_position="top")
+
+        # Steg 2: vänd så mest minuter ligger överst
+        fig_team.update_yaxes(autorange="reversed")
 
         fig_team.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=700)
 
-        # En enkel “CDF-stil” på lag-nivå (kumulativ total minuter per datum summerat över spelare)
         per_match = (dff.groupby("match_date", as_index=False)
                      .agg(total_minutes=("minutes","sum"))
                      .sort_values("match_date"))
@@ -559,11 +671,11 @@ def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
             dcc.Graph(figure=fig_team),
             dcc.Graph(figure=fig_cdf_team),
             html.Div(style={"color": COLORS["muted"], "fontSize": "12px"},
-                     children="Tips: Klicka på en stapel i topplistan och använd spelartabben för djupdykning.")
+                     children="Tips: Använd spelartabben för djupdykning per spelare.")
         ])
 
     if tab == "spelare":
-        players = sorted(DF["name"].unique())
+        players = sorted(df["name"].unique())
         default_player = player_name if (player_name in players) else (players[0] if players else None)
 
         return html.Div([
@@ -590,25 +702,6 @@ def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
             html.Div(id="player-content"),
         ])
 
-    if tab == "kvalitet":
-        dfq = DF.copy()
-        bad_minutes = (dfq["minutes"] < 0) | (dfq["minutes"] > 130)
-        missing_birth = dfq["birth_year"].isna().sum()
-        missing_pos = dfq["position"].isna().sum()
-
-        return html.Div([
-            html.Ul(style={"marginTop": 0}, children=[
-                html.Li(f"Totalt antal rader: {len(dfq)}"),
-                html.Li(f"Antal spelare: {dfq['name'].nunique()}"),
-                html.Li(f"Antal matcher: {dfq[['team','match_date']].drop_duplicates().shape[0]}"),
-                html.Li(f"Rader med minuter utanför 0–130: {int(bad_minutes.sum())}"),
-                html.Li(f"Rader utan Birth year: {int(missing_birth)}"),
-                html.Li(f"Rader utan Position: {int(missing_pos)}"),
-            ]),
-            html.Div(style={"color": COLORS["muted"], "fontSize": "12px"},
-                     children="Rekommendation: För test av 2025-data, fyll Birth year + Position på samtliga spelare (minst alla som förekommer i matcher).")
-        ])
-
     return html.Div("Okänd flik.", style={"color": COLORS["muted"]})
 
 
@@ -620,49 +713,46 @@ def render_tabs(tab, search, teams, comps, start_date, end_date, topn):
     Input("comp-filter", "value"),
     Input("date-filter", "start_date"),
     Input("date-filter", "end_date"),
+    Input("df-store", "data"),
 )
-def render_player(player, window, teams, comps, start_date, end_date):
+def render_player(player, window, teams, comps, start_date, end_date, df_json):
+    df = pd.read_json(df_json, orient="split") if df_json else pd.DataFrame()
+    if df.empty:
+        return html.Div("Ingen data laddad.", style={"color": COLORS["muted"]})
+
     if not player:
         return html.Div("Välj en spelare.", style={"color": COLORS["muted"]})
 
-    dff = apply_filters(DF, teams, comps, start_date, end_date)
+    dff = apply_filters(df, teams, comps, start_date, end_date)
     dp = dff[dff["name"] == player].sort_values("match_date")
     if dp.empty:
         return html.Div("Ingen data för vald spelare med aktuella filter.", style={"color": COLORS["muted"]})
 
-    # Spelarkortdata
     birth_year = dp["birth_year"].dropna().iloc[0] if dp["birth_year"].dropna().shape[0] else None
     age = int(dp["age"].dropna().iloc[0]) if dp["age"].dropna().shape[0] else None
     pos = dp["position"].dropna().iloc[0] if dp["position"].dropna().shape[0] else None
     team_guess = dp["team"].mode().iloc[0] if dp["team"].nunique() else None
 
-    # (1) Speltid över tid – kumulativ (CDF-stil) för spelare
+    # CDF-stil
     cdf = dp.groupby("match_date", as_index=False).agg(minuter=("minutes","sum"), possible=("possible_minutes","max"))
     cdf = cdf.sort_values("match_date")
     cdf["kumulativ"] = cdf["minuter"].cumsum()
 
-    fig_cdf = px.line(
-        cdf, x="match_date", y="kumulativ", markers=True,
-        title="Speltid över tid (kumulativ / CDF-stil)",
-    )
+    fig_cdf = px.line(cdf, x="match_date", y="kumulativ", markers=True,
+                      title="Speltid över tid (kumulativ / CDF-stil)")
     fig_cdf.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=320)
 
-    # (2) Månadssummering
+    # Månadssummering – formatera månad så det inte blir "timestamp-etiketter"
     dp2 = dp.copy()
-    dp2["månad"] = dp2["match_date"].dt.to_period("M").astype(str)
+    dp2["månad"] = dp2["match_date"].dt.strftime("%Y-%m")
     per_month = dp2.groupby("månad", as_index=False)["minutes"].sum().sort_values("månad")
-    fig_month = px.bar(
-        per_month, x="månad", y="minutes",
-        title="Månadssummering: totalt spelade minuter",
-    )
+    fig_month = px.bar(per_month, x="månad", y="minutes", title="Månadssummering: totalt spelade minuter")
     fig_month.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=320)
 
-    # (3) Andel av möjlig speltid
+    # Andel av möjlig speltid
     share_season = player_share(dp)
-    # senaste 5 matcher
     dp_last5 = dp.tail(5)
     share_last5 = player_share(dp_last5) if len(dp_last5) else 0.0
-    # senaste 30/90 dagar från senaste match i filtrerad data
     end = dp["match_date"].max()
     dp_30 = dp[(dp["match_date"] > end - pd.Timedelta(days=30)) & (dp["match_date"] <= end)]
     dp_90 = dp[(dp["match_date"] > end - pd.Timedelta(days=90)) & (dp["match_date"] <= end)]
@@ -676,31 +766,23 @@ def render_player(player, window, teams, comps, start_date, end_date):
         ["Senaste 90 dagar", share_90],
     ], columns=["Period", "Andel"])
 
-    fig_share = px.bar(
-        share_df, x="Period", y="Andel",
-        title="Andel av möjlig speltid",
-    )
+    fig_share = px.bar(share_df, x="Period", y="Andel", title="Andel av möjlig speltid")
     fig_share.update_yaxes(tickformat=".0%")
     fig_share.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=320)
 
     # Rullande belastning (matchfönster)
     roll = dp.groupby("match_date", as_index=False)["minutes"].sum().sort_values("match_date")
     roll["rullande"] = roll["minutes"].rolling(int(window), min_periods=1).sum()
-    fig_roll = px.line(
-        roll, x="match_date", y="rullande", markers=True,
-        title=f"Rullande belastning: senaste {int(window)} matcher (minuter)",
-    )
+    fig_roll = px.line(roll, x="match_date", y="rullande", markers=True,
+                       title=f"Rullande belastning: senaste {int(window)} matcher (minuter)")
     fig_roll.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=320)
 
-    # En “timeline” (minuter per match) med opponent i hover
-    fig_timeline = px.bar(
-        dp, x="match_date", y="minutes",
-        hover_data=["team","competition","opponent","possible_minutes"],
-        title="Minuter per match",
-    )
+    # Timeline
+    fig_timeline = px.bar(dp, x="match_date", y="minutes",
+                          hover_data=["team","competition","opponent","possible_minutes"],
+                          title="Minuter per match")
     fig_timeline.update_layout(margin=dict(l=10,r=10,t=55,b=10), height=320)
 
-    # Spelarkort (modernare)
     header = html.Div(
         style={"display": "grid", "gridTemplateColumns": "2fr 1fr 1fr 1fr", "gap": "10px", "marginBottom": "10px"},
         children=[
@@ -712,17 +794,15 @@ def render_player(player, window, teams, comps, start_date, end_date):
             html.Div(style={**CARD_STYLE}, children=[
                 html.Div("Position", style={"fontSize":"12px","color":COLORS["muted"]}),
                 html.Div(pos or "—", style={"fontSize":"18px","fontWeight":"700","color":COLORS["text"]}),
-                html.Div(" ", style={"fontSize":"13px","color":COLORS["muted"]}),
             ]),
             html.Div(style={**CARD_STYLE}, children=[
                 html.Div("Födelseår", style={"fontSize":"12px","color":COLORS["muted"]}),
-                html.Div(str(int(birth_year)) if birth_year is not None else "—", style={"fontSize":"18px","fontWeight":"700","color":COLORS["text"]}),
-                html.Div(" ", style={"fontSize":"13px","color":COLORS["muted"]}),
+                html.Div(str(int(birth_year)) if birth_year is not None else "—",
+                         style={"fontSize":"18px","fontWeight":"700","color":COLORS["text"]}),
             ]),
             html.Div(style={**CARD_STYLE}, children=[
                 html.Div("Ålder (säsong)", style={"fontSize":"12px","color":COLORS["muted"]}),
                 html.Div(str(age) if age is not None else "—", style={"fontSize":"18px","fontWeight":"700","color":COLORS["text"]}),
-                html.Div(" ", style={"fontSize":"13px","color":COLORS["muted"]}),
             ]),
         ]
     )
@@ -743,4 +823,3 @@ def render_player(player, window, teams, comps, start_date, end_date):
 
 if __name__ == "__main__":
     app.run(debug=True)
-
